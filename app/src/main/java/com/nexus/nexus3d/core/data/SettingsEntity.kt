@@ -12,6 +12,5 @@ data class SettingsEntity(
     val macroRoomSize: Float = 0.5f,
     val macroClarity: Float = 0.5f,
     val macroDistance: Float = 0.5f,
-    val isDspEnabled: Boolean = true,
-    val themeMode: Int = 0 // 0: System, 1: Light, 2: Dark
+    val isDspEnabled: Boolean = true
 )

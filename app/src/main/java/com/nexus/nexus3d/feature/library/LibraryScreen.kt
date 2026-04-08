@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -84,8 +85,8 @@ fun LibraryScreen(
             if (hasPermission) {
                 ExtendedFloatingActionButton(
                     onClick = { viewModel.scanLibrary() },
-                    text = { Text("Scan") },
-                    icon = { }
+                    icon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    text = { Text("Scan") }
                 )
             }
         }

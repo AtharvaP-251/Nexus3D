@@ -35,14 +35,9 @@ private val LightColorScheme = lightColorScheme(
 
 @Composable
 fun Nexus3DTheme(
-    themeMode: Int = 0, // 0: System, 1: Light, 2: Dark
     content: @Composable () -> Unit
 ) {
-    val darkTheme = when (themeMode) {
-        1 -> false
-        2 -> true
-        else -> isSystemInDarkTheme()
-    }
+    val darkTheme = isSystemInDarkTheme()
     
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
     

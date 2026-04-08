@@ -34,7 +34,6 @@ fun SettingsScreen(
     val allPresets by viewModel.allPresets.collectAsState()
     val macros by viewModel.currentMacros.collectAsState()
     val isDspEnabled by viewModel.isDspEnabled.collectAsState()
-    val themeMode by viewModel.themeMode.collectAsState()
 
     Column(
         modifier = Modifier
@@ -166,69 +165,7 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.width(8.dp))
             Text("Reset to Neutral")
         }
-
-        Spacer(modifier = Modifier.height(40.dp))
-
-        // Theme Section
-        Text(
-            text = "Appearance",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold
-        )
-        Spacer(modifier = Modifier.height(16.dp))
         
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                .padding(4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            ThemeOption(
-                label = "System",
-                isSelected = themeMode == 0,
-                modifier = Modifier.weight(1f),
-                onClick = { viewModel.setThemeMode(0) }
-            )
-            ThemeOption(
-                label = "Light",
-                isSelected = themeMode == 1,
-                modifier = Modifier.weight(1f),
-                onClick = { viewModel.setThemeMode(1) }
-            )
-            ThemeOption(
-                label = "Dark",
-                isSelected = themeMode == 2,
-                modifier = Modifier.weight(1f),
-                onClick = { viewModel.setThemeMode(2) }
-            )
-        }
-
-        Spacer(modifier = Modifier.height(48.dp))
-        
-        // Status indicator
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(8.dp)
-                    .clip(androidx.compose.foundation.shape.CircleShape)
-                    .background(if (isDspEnabled) Color(0xFF4CAF50) else Color(0xFF9E9E9E))
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Text(
-                text = if (isDspEnabled) "Live 3D DSP Active" else "DSP Bypassed",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
     }
 }
 
@@ -307,29 +244,3 @@ fun MacroSlider(
     }
 }
 
-@Composable
-fun ThemeOption(
-    label: String,
-    isSelected: Boolean,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    val backgroundColor = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent
-    val textColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
-
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(backgroundColor)
-            .clickable { onClick() }
-            .padding(vertical = 10.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelLarge,
-            color = textColor,
-            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-        )
-    }
-}

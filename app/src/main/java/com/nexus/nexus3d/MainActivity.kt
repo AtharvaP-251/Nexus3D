@@ -32,10 +32,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            val settingsViewModel: SettingsViewModel = hiltViewModel()
-            val themeMode by settingsViewModel.themeMode.collectAsState()
 
-            Nexus3DTheme(themeMode = themeMode) {
+            Nexus3DTheme {
                 NexusApp()
             }
         }

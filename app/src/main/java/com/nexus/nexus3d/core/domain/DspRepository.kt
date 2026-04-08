@@ -33,8 +33,6 @@ class DspRepository @Inject constructor(
     private val _isDspEnabled = MutableStateFlow(true)
     val isDspEnabled: StateFlow<Boolean> = _isDspEnabled.asStateFlow()
 
-    private val _themeMode = MutableStateFlow(0)
-    val themeMode: StateFlow<Int> = _themeMode.asStateFlow()
 
     init {
         repositoryScope.launch {
@@ -54,7 +52,6 @@ class DspRepository @Inject constructor(
                     distance = activeSettings.macroDistance
                 )
                 _isDspEnabled.value = activeSettings.isDspEnabled
-                _themeMode.value = activeSettings.themeMode
                 
                 applyBasePreset(preset)
                 MacroMapper.applyMacros(_currentMacros.value)
@@ -140,13 +137,6 @@ class DspRepository @Inject constructor(
         }
     }
 
-    fun setThemeMode(mode: Int) {
-        _themeMode.value = mode
-        repositoryScope.launch {
-            val currentSettings = settingsDao.getSettingsSync() ?: SettingsEntity()
-            settingsDao.updateSettings(currentSettings.copy(themeMode = mode))
-        }
-    }
 
     private fun applyBasePreset(preset: PresetEntity?) {
         val p = preset ?: PresetEntity(name = "Default")
