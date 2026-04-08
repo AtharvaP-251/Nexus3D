@@ -3,7 +3,6 @@ package com.nexus.nexus3d.feature.player
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -27,7 +26,6 @@ fun PlayerScreen(
     onNavigateBack: () -> Unit
 ) {
     val playbackState by viewModel.playbackState.collectAsState()
-    val isDspEnabled by viewModel.isDspEnabled.collectAsState()
     val track = playbackState.currentTrack
     
     Scaffold(
@@ -195,51 +193,7 @@ fun PlayerScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(40.dp))
 
-            // Master Spatial Toggle ("Off Toggle")
-            Surface(
-                onClick = { viewModel.toggleDsp(!isDspEnabled) },
-                shape = RoundedCornerShape(24.dp),
-                color = if (isDspEnabled) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(64.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 24.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(10.dp)
-                                .clip(CircleShape)
-                                .background(if (isDspEnabled) Color(0xFF4CAF50) else Color.Gray)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text(
-                                text = "Nexus3D Engine",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = if (isDspEnabled) "VIVID SPATIAL ACTIVE" else "BYPASSED (OFF)",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                    Switch(
-                        checked = isDspEnabled,
-                        onCheckedChange = { viewModel.toggleDsp(it) }
-                    )
-                }
-            }
             
             Spacer(modifier = Modifier.height(16.dp))
         }

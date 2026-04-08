@@ -8,8 +8,10 @@ import com.nexus.nexus3d.core.data.TrackEntity
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.io.File
 import javax.inject.Inject
 
 import com.nexus.nexus3d.audio.AudioController
@@ -26,6 +28,25 @@ class LibraryViewModel @Inject constructor(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = emptyList()
+        )
+
+    val groupedTracks: StateFlow<Map<String, List<TrackEntity>>> = tracks
+        .map { list ->
+            val grouped = list.groupBy { track ->
+                File(track.filePath).parentFile?.name ?: "Internal Storage"
+            }.toSortedMap()
+            
+            linkedMapOf<String, List<TrackEntity>>().apply {
+                if (list.isNotEmpty()) {
+                    put("All Songs", list)
+                }
+                putAll(grouped)
+            }
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyMap()
         )
 
     fun scanLibrary() {
