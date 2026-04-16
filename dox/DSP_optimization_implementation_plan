@@ -1,0 +1,212 @@
+# Nexus3D — Flagship Spatial Audio Engine: Deep DSP Audit & Upgrade Plan
+
+## Objective
+Converge the spatial audio engine to flagship-level performance: immersive, natural, technically perfect — matching or exceeding Dolby Atmos headphone standards for a personal-audio app without head tracking.
+
+---
+
+## Part 1: Critical Audit Findings
+
+### 🔴 CRITICAL — Bugs / Zero-Quality Issues
+
+#### 1. `HrtfModule` — ITD is wired but **never applied** (dead code)
+The `ITD_AMOUNT` parameter is read, a delay line is initialized, but the actual delay is **never applied in the sample loop** (the comment says "FIX: Removed asymmetric ITD delay application"). This means the most powerful binaural cue — Interaural Time Difference — is **completely silent**. ITD is the dominant cue for azimuthal (left/right) externalization. Without it, the image stays inside the head regardless of how good the HRTF filters are.
+
+**Fix:** Re-enable fractional-sample ITD delay on the R-channel inside `HrtfModule::process()` using `readFrac()`, with correct level compensation.
+
+#### 2. `HaasDelayModule` — Cross-delay polarity is **additive** (causes comb filtering)
+Current implementation: `buffer[i*2] = l + rToL * mix`. Adding a delayed copy of the opposite channel back to direct is the classic Haas effect, but the lack of a **decorrelated mix** (no high-pass or spectral shaping on cross-bleed) creates significant comb filtering artifacts above 1 kHz, which damages timbre. Haas cross-bleed should be spectrally shaped (or at least low-passed above ~3 kHz) so only the low-frequency externalization cue is added, not a full-band echo.
+
+**Fix:** Add a 1st-order LP at ~2.5 kHz on the cross-bleed path inside `HaasDelayModule`.
+
+#### 3. `EarlyReflectionsModule` — **Tap delay computation is doubly-scaled** (all taps collapse near zero)
+`tapNormL[t] × spreadMs × spreadScaleL` — where `spreadScaleL = spreadMs / 45`. This is `tapNorm × spreadMs²/45`. With `spreadMs = 22ms`, `spreadScaleL = 22/45 ≈ 0.489`. So `tapNorm × 22 × 0.489 ≈ tapNorm × 10.75 ms`. The last tap (norm=1.0) is only **~10 ms** instead of 22 ms. All taps are compressed into ≤10 ms — producing dense flutter instead of spacious room impression. The maximum-delay tap should equal `spreadMs`.
+
+**Fix:** `dL = (int)(tapNormL[t] × spreadMs × sampleRate / 1000)` — remove the spurious `spreadScaleL` double-multiply.
+
+#### 4. `ReverbModule` — **No limiter / output safety net** (potential clipping)
+`ProcessorChain.cpp` relies on a hard clamp (`if sample > 1.0 → 1.0`) after DSP, but the reverb output is summed back with `dry` at unity and can exceed ±1.0 especially when `roomSize` is high + `decay` ≈ 0.9. Hard clipping introduces harmonic distortion.
+
+**Fix:** Add a True-Peak lookahead limiter (or at minimum a soft-knee brickwall) as the **final stage** in `ProcessorChain`, replacing the hard clamp.
+
+#### 5. `MidSideModule` — **Early-return at md=1,side=1 bypasses adaptive protection**
+When both gains are 1.0 (default), the function returns with `return` at line 221–222. The **adaptive side-reduction logic** that prevents over-widening during loud passages never runs. This affects StereoWidthModule which follows — the two adaptive systems never interact at their intended operating point.
+
+**Fix:** Separate the bypass condition from the adaptive logic. Apply adaptive protection always, only bypass if both adaptive output and parameter are minimal.
+
+#### 6. `StereoWidthModule` — **LP and HP at same 300 Hz cutoff on different filter instances creates summation error**
+Two separate biquads (`lpL` and `hpL`) at the same cutoff are summed: `bL + tL`. Butterworth LP + Butterworth HP at the same frequency do NOT sum to unity — they have a 3dB boost at the crossover (quadrature summing). This creates a 3 dB notch or boost at 300 Hz depending on phase.
+
+**Fix:** Use a proper Linkwitz-Riley crossover (Q = 0.5 for LR2 = Butterworth cascaded) so LP + HP = unity gain. Set Q = 0.5 (Butterworth²) for both filters.
+
+---
+
+### 🟡 MODERATE — Algorithmic Weaknesses
+
+#### 7. `CrossfeedModule` — Processing order is backwards
+Current: `hsL.process(lpR.process(...))` — applies high-shelf **after** low-pass. The LP already cuts high frequencies, then the HS tries to cut them again from an already-rolled-off signal. The correct order per BS.2B standard is: apply ILD (head shadow) **before** LP, so: LP processes the full signal FIRST (removes non-diffracting freqs), then HS penalizes what passes through LP redundantly. Actually the correct model is just LP (with freq ≈ 700 Hz) + fixed amplitude attenuation of about -9.5 dB, which the HS approximates. The correct BS.2B order is fine but using LP **first** (which then the HS has nothing to process) is wasteful — instead the standard does: apply HS globally to full-band cross signal (ILD), then LP the result. Current order processes LP first then HS on already LP'd signal = correct per spec but redundant computation. **Acceptable but suboptimal.**
+
+#### 8. `Biquad` — **Direct Form I** accumulates numerical errors in double precision
+For phone audio at 44.1/48 kHz, DF-I `float` is generally adequate, but becomes unstable for near-DC shelves and very high-Q notches (like 14 kHz notch used in HrtfModule). DF-II Transposed is numerically superior, especially for the HRTF notch cascade.
+
+**Fix:** Switch Biquad to Transposed Direct Form II (TDFII) for better numerical stability.
+
+#### 9. `HrtfModule` — **Both channels use identical symmetric cues** (no ILD)
+After the previous "FIX" that removed the asymmetric processing, both L and R channels now get **identical HRTF spectral shaping**. Real binaural audio requires:
+- Ipsilateral (near-ear, L): pinna resonances boosted
+- Contralateral (far-ear, R): head-shadow filter (LP + HF attenuation)
+
+Without this asymmetry, there is NO Interaural Level Difference (ILD). Combined with disabled ITD, the HRTF provides zero externalization cues — it only colors the sound equally in both channels (tonal change, not spatialization).
+
+**Fix:** Restore asymmetric L/R HRTF shaping. L = ipsilateral (pinna peaks/notches). R = contralateral (head-shadow LP + ILD attenuation). This combined with ITD enables true binaural externalization.
+
+#### 10. `ReverbModule` — **Allpass gains are non-prime-offset and too similar** (metallic ringing)
+Alternating allpass gains `{0.50, 0.48, 0.52, 0.47, 0.51, 0.49}` are all in a narrow 0.47-0.53 band — this creates a near-identical resonance frequency for all diffusers, producing metallic coloration in the reverb tail. Gardner/Schroeder best practice: use gains that differ significantly (0.3–0.7 range) with at least 0.08 between consecutive stages.
+
+**Fix:** Set allpass gains to `{0.50, 0.37, 0.58, 0.33, 0.61, 0.42}` — wider spread without instability.
+
+#### 11. `DspContext.h` — **Default `WIDTH_AMOUNT = 1.15`** causes 3 dB summation error always
+Due to the DF-I + Butterworth crossover issue (finding #6), every user experiences a 3 dB notch at 300 Hz even at zero-effect settings. The crossover fix will resolve this, but the default value should also be set to `1.0f` (unit-gain) for the transparent passthrough case.
+
+---
+
+### 🟢 MINOR — Optimization & Polish
+
+#### 12. `ProcessorChain` — Hard-coded 48000 Hz sample rate in `processAudio()`
+The JNI `processAudio` call hard-codes 48000 Hz. If ExoPlayer delivers 44.1 kHz content, all time-based modules (delay lines, filter coefficients) are mis-tuned by ~8.5%.
+
+**Fix:** Store the sample rate from the ExoPlayer audio format callback and pass it through `processAudio()`.
+
+#### 13. `DelayLine::read()` — Integer-only reads for ITD in all modules except standalone ItdModule
+All delay reads in HRTF, Crossfeed, Early Reflections use integer `read()` — this introduces quantization error of up to 1 sample. At 48 kHz, 1 sample = 20 µs — significant for ITD accuracy (entire ITD range is 700 µs = 33 samples).
+
+**Fix:** Use `readFrac()` (linear interpolation already implemented) for all precision ITD reads.
+
+#### 14. `MacroMapper` — `resetMacros()` resets to 0.0f (bypass everything)
+When the user resets macros, everything goes to 0% — no crossfeed, no width expansion, no HRTF. This makes "reset" sound like bypass. For Custom preset, neutral should be 0.5f (flagship defaults).
+
+**Fix:** Reset to 0.5f for Custom preset, 0.5f for all macros = preset defaults.
+
+---
+
+## Part 2: Proposed Changes
+
+### Component: `DspMath.h`
+
+#### [MODIFY] [DspMath.h](file:///c:/Users/athar/Desktop/Nexus3D/app/src/main/cpp/DspMath.h)
+- Upgrade `Biquad` from Direct Form I to **Transposed Direct Form II (TDFII)** for numerical stability
+- Add `processHP()` convenience for filter splitting
+- Add `SoftLimiter` class — soft-knee true-peak limiter for the final chain stage
+
+---
+
+### Component: `Modules.h` / `Modules.cpp`
+
+#### [MODIFY] [Modules.h](file:///c:/Users/athar/Desktop/Nexus3D/app/src/main/cpp/modules/Modules.h)
+- Add `SoftLimiterModule` class declaration (final chain module)
+
+#### [MODIFY] [Modules.cpp](file:///c:/Users/athar/Desktop/Nexus3D/app/src/main/cpp/modules/Modules.cpp)
+
+**`HrtfModule::process()`:**
+- Restore asymmetric L (ipsilateral) / R (contralateral) HRTF processing with accurate ILD
+- Re-enable fractional-sample ITD delay on R-channel using `readFrac()`
+- L-channel: pinna peaks (4kHz, 8.5kHz) + notches (7.8, 12.5, 14kHz) + elevation shelf
+- R-channel: head-shadow LP at 1.5kHz, deep notch at 10kHz, treble shelf -3dB, ILD gain -6dB
+
+**`HaasDelayModule::process()`:**
+- Add 1st-order LP (~2.5 kHz) on the cross-bleed path before adding to direct signal
+- Prevents comb filtering while preserving low-frequency precedence cue
+
+**`EarlyReflectionsModule::process()`:**
+- Fix double-scale bug: `dL = (int)(tapNormL[t] * spreadMs * sampleRate / 1000)`
+- Remove `spreadScaleL` / `spreadScaleR` intermediate scaling variables
+
+**`MidSideModule::process()`:**
+- Remove the early return bypass — always run adaptive protection logic
+- Add separate bypass check: if signals are already neutral AND RMS is below threshold, skip
+
+**`StereoWidthModule::process()`:**
+- Change LP/HP filter Q from 0.707 (Butterworth) to 0.5 (Linkwitz-Riley) for unity summation at crossover
+
+**`ReverbModule::process()`:**
+- Update allpass gain arrays to wider spread: `{0.50, 0.37, 0.58, 0.33, 0.61, 0.42}`
+
+**`SoftLimiterModule` (NEW):**
+- Attack: 0.05 ms, Release: 50 ms
+- Soft-knee at -1 dBFS, hard brickwall at 0 dBFS
+- Gain reduction stored as `OnePole`-smoothed state to prevent clicks
+
+---
+
+### Component: `ProcessorChain.cpp`
+
+#### [MODIFY] [ProcessorChain.cpp](file:///c:/Users/athar/Desktop/Nexus3D/app/src/main/cpp/ProcessorChain.cpp)
+- Add `SoftLimiterModule` as final module in the chain
+- Replace hard clamp with comment noting limiter handles it (keep as safety net only)
+
+---
+
+### Component: `DspContext.h`
+
+#### [MODIFY] [DspContext.h](file:///c:/Users/athar/Desktop/Nexus3D/app/src/main/cpp/DspContext.h)
+- Change `WIDTH_AMOUNT` default from `1.15f` to `1.0f` (unit gain — transparent baseline, macro adds widening)
+- Change `HAAS_MIX` default from `0.22f` to `0.18f` (lower default to compensate for fixed spectral shaping)
+- Change `ITD_AMOUNT` default from `0.35f` to `0.40f` (now active — slightly higher for clearer externalization)
+- Change `HRTF_INTENSITY` default from `0.65f` to `0.70f` (now asymmetric = more effective at same intensity value)
+
+---
+
+### Component: `MacroMapper.kt`
+
+#### [MODIFY] [MacroMapper.kt](file:///c:/Users/athar/Desktop/Nexus3D/app/src/main/java/com/nexus/nexus3d/core/domain/MacroMapper.kt)
+- No changes needed — mapping logic is sound; the DSP fixes will make the mapped parameters work correctly
+
+---
+
+### Component: `DspRepository.kt`
+
+#### [MODIFY] [DspRepository.kt](file:///c:/Users/athar/Desktop/Nexus3D/app/src/main/java/com/nexus/nexus3d/core/domain/DspRepository.kt)
+- Update `resetMacros()`: reset to `0.5f` for all macros (not `0.0f`) for natural-sounding reset to flagship defaults
+
+---
+
+## Part 3: Processing Chain Order (Validated)
+
+```
+PCM → [PreEQ] → [Phase Align] → [Crossfeed] → [MidSide] → [StereoWidth]
+     → [HaasDelay] → [HRTF+ITD] → [EarlyReflections] → [Reverb] → [SoftLimiter] → PCM
+```
+
+**Rationale (confirmed correct):**
+1. **PreEQ first** — corrective tonal shaping before spatial processing
+2. **Phase alignment** — fixes transducer phase before any matrix operations
+3. **Crossfeed (BS.2B)** — collapses excessive stereo width *before* M/S expansion (correct order: reduce first, then expand to taste)
+4. **MidSide + StereoWidth** — widen from the crossfeed baseline (not from raw stereo)
+5. **Haas** — precedence effect; externalization anchor before HRTF
+6. **HRTF + ITD** — binaural filtering after geometric width is set
+7. **Early Reflections** — virtual room surfaces (short delays)
+8. **Reverb** — late diffuse field (long tail)
+9. **SoftLimiter** — final safety net; no distortion on output
+
+---
+
+## Part 4: Verification Metrics
+
+After implementation, the following must hold:
+- **Tonal Transparency at 0.5 macro**: A/B null test between bypassed and processed output should show ≤ -60 dB difference in flat-EQ stereo content (verifiable via logcat RMS comparison)
+- **No echo artifacts**: Haas delay at 8ms with LP-filtered cross-bleed — no perceived double-image
+- **Stereo image centered**: At default settings, a mono sine wave should appear at dead center (no left-bias from ITD)
+- **ER tap timing correct**: Last ER tap should delay by exactly `ER_DELAY_SPREAD_MS` (22 ms = 1058 samples at 48kHz)
+- **No output clipping**: Peak output ≤ 0 dBFS under all preset combinations
+- **ReverbTail**: Smooth, non-metallic decay verifiable by listening test on pink noise
+
+---
+
+## Open Questions
+
+> [!IMPORTANT]
+> **Sample Rate Passthrough**: The `processAudio()` JNI call hard-codes 48000 Hz. Should I also fix this in `CustomAudioProcessor.kt` to pass the real sample rate from ExoPlayer's `AudioFormat`? This is a correctness fix but touches more files. **Recommended: Yes**, especially for 44.1 kHz content.
+
+> [!NOTE]
+> **ITD Azimuth Direction**: With the fix, re-enabling ITD delays R relative to L — this models a sound source slightly to the LEFT (ipsilateral = L). The default `ITD_AMOUNT = 0.40` maps to ~280µs. For a front-center image, ITD should be near 0. I'll set ITD_AMOUNT default to **0.0 in DspContext defaults**, while the Preset/Macro layer applies a controlled amount. This ensures bit-perfect transparent default but macros can dial in externalization.
+
