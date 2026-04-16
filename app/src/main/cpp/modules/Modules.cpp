@@ -452,13 +452,13 @@ void HrtfModule::process(float *buffer, int numFrames,
     pinnaNotchL3.setPeaking(14000.0f, 3.0f, -3.0f, sampleRate);
     pinnaHighL.setHighShelf(13000.0f, elevation * 2.5f, sampleRate);
 
-    // RIGHT — contralateral, head-shadowed
-    pinnaPeakR1.setPeaking(3000.0f, 1.0f, 1.5f, sampleRate);
-    pinnaPeakR2.setPeaking(6000.0f, 1.5f, 1.0f, sampleRate);
-    pinnaNotchR1.setPeaking(10000.0f, 2.5f, -10.0f, sampleRate);
-    pinnaNotchR2.setPeaking(13000.0f, 2.0f, -6.0f, sampleRate);
-    pinnaNotchR3.setPeaking(7500.0f, 3.0f, -4.0f, sampleRate);
-    pinnaHighR.setHighShelf(8000.0f, -3.0f, sampleRate);
+    // RIGHT — symmetric ipsilateral (frontal/elevation cue)
+    pinnaPeakR1.setPeaking(4000.0f, 1.4f, 3.0f, sampleRate);
+    pinnaPeakR2.setPeaking(8500.0f, 2.0f, 2.0f, sampleRate);
+    pinnaNotchR1.setPeaking(7800.0f, 3.5f, -8.0f, sampleRate);
+    pinnaNotchR2.setPeaking(12500.0f, 2.5f, -5.0f, sampleRate);
+    pinnaNotchR3.setPeaking(14000.0f, 3.0f, -3.0f, sampleRate);
+    pinnaHighR.setHighShelf(13000.0f, elevation * 2.5f, sampleRate);
 
     prevSampleRate = sampleRate;
     prevIntensity = intensity;
@@ -485,9 +485,8 @@ void HrtfModule::process(float *buffer, int numFrames,
     float l = buffer[i * 2];
     float r = buffer[i * 2 + 1];
 
-    // Apply ITD: delay R channel for L/R timing asymmetry
-    itdDelayR.write(r);
-    float rItd = (itdSamples > 0.0f) ? itdDelayR.readFrac(itdSamples) : r;
+    // Disable asymmetric ITD to prevent left panning of centered vocals
+    float rItd = r;
 
     // HRTF spectral shaping
     float fl = pinnaHighL.process(pinnaNotchL3.process(pinnaNotchL2.process(

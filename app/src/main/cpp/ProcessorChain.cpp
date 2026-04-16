@@ -40,12 +40,13 @@ void ProcessorChain::init() {
   modules.push_back(std::make_unique<StereoWidthModule>());
   modules.push_back(std::make_unique<HaasDelayModule>());
   modules.push_back(std::make_unique<HrtfModule>());
+  modules.push_back(std::make_unique<DistanceModelingModule>());
 
   // Room simulation
   modules.push_back(std::make_unique<EarlyReflectionsModule>());
   modules.push_back(std::make_unique<ReverbModule>());
 
-  // PanningModule and DistanceModelingModule are NOT in the chain.
+  // PanningModule is NOT in the chain.
   // Classes retained in Modules.h/cpp for future preset use.
 
   LOGD("ProcessorChain initialized with %zu modules", modules.size());
