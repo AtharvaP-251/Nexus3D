@@ -1,0 +1,30 @@
+Listed directory cpp
+Listed directory modules
+Searched for "(object|pos|coord|spatial)"
+Searched for "(spatial|object|hrtf|pan|distance)"
+Searched for "Spatial"
+Viewed Modules.h:1-318
+Viewed DspContext.h:1-187
+Viewed ProcessorChain.cpp:1-118
+Searched for "Object"
+Viewed HRTF%20Fix%20Plan:1-195
+Viewed dsp_native.cpp:1-50
+
+Based on my analysis of the `nexus::ProcessorChain` and the `Modules` implementation, the answer is **no, we do not use object-based spatial audio** in the formal industry sense (like Dolby Atmos or MPEG-H).
+
+Instead, the system is a **Channel-Based Virtualization Engine**. Here is the breakdown:
+
+### Why it's not "Object-Based":
+1.  **Single Audio Stream**: The `processAudio` function in `dsp_native.cpp` receives a single stereo PCM buffer. It does not handle multiple independent "objects" with their own unique buffers and metadata. 
+2.  **Static DSP Chain**: The processing is applied to the entire stereo mix as a unit. In an object-based system, each object would have its own instance of a spatializer or a metadata-driven renderer.
+3.  **No Adaptive Rendering**: Object-based audio (OBA) typically scales based on the speaker layout (e.g., 5.1 vs. 7.1.4). Nexus is hardcoded for **binaural headphone virtualization** (converting stereo inputs into a 3D headphone image).
+
+### What we use instead:
+We use a **Coordinate-Driven Virtualization Model**. While we process a stereo signal, the parameters in `DspContext.h` effectively map to a single virtual source position using **Spherical Coordinates**:
+
+*   **Azimuth**: Encoded via `ITD_AMOUNT` (lateral timing) and `HRTF_INTENSITY` (head-shadow ILD).
+*   **Elevation**: Encoded via `HRTF_ELEVATION` (Blauert-band pinna cues).
+*   **Distance (r)**: Encoded via `DISTANCE_AMOUNT`, which controls 1/r² rolloff, ISO 9613-1 air absorption, and D/R ratio coupling.
+
+### Summary
+The engine treats the **"Stereo Soundstage" as a single spatial entity** that can be moved, elevated, and distanced from the listener, rather than tracking multiple independent individual audio objects.

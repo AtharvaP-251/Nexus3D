@@ -1,4 +1,4 @@
-# Nexus3D — Flagship Spatial Audio Engine: Deep DSP Audit & Upgrade Plan
+# Nexus — Flagship Spatial Audio Engine: Deep DSP Audit & Upgrade Plan
 
 ## Objective
 Converge the spatial audio engine to flagship-level performance: immersive, natural, technically perfect — matching or exceeding Dolby Atmos headphone standards for a personal-audio app without head tracking.
@@ -93,7 +93,7 @@ When the user resets macros, everything goes to 0% — no crossfeed, no width ex
 
 ### Component: `DspMath.h`
 
-#### [MODIFY] [DspMath.h](file:///c:/Users/athar/Desktop/Nexus3D/app/src/main/cpp/DspMath.h)
+#### [MODIFY] [DspMath.h](file:///c:/Users/athar/Desktop/Nexus/app/src/main/cpp/DspMath.h)
 - Upgrade `Biquad` from Direct Form I to **Transposed Direct Form II (TDFII)** for numerical stability
 - Add `processHP()` convenience for filter splitting
 - Add `SoftLimiter` class — soft-knee true-peak limiter for the final chain stage
@@ -102,10 +102,10 @@ When the user resets macros, everything goes to 0% — no crossfeed, no width ex
 
 ### Component: `Modules.h` / `Modules.cpp`
 
-#### [MODIFY] [Modules.h](file:///c:/Users/athar/Desktop/Nexus3D/app/src/main/cpp/modules/Modules.h)
+#### [MODIFY] [Modules.h](file:///c:/Users/athar/Desktop/Nexus/app/src/main/cpp/modules/Modules.h)
 - Add `SoftLimiterModule` class declaration (final chain module)
 
-#### [MODIFY] [Modules.cpp](file:///c:/Users/athar/Desktop/Nexus3D/app/src/main/cpp/modules/Modules.cpp)
+#### [MODIFY] [Modules.cpp](file:///c:/Users/athar/Desktop/Nexus/app/src/main/cpp/modules/Modules.cpp)
 
 **`HrtfModule::process()`:**
 - Restore asymmetric L (ipsilateral) / R (contralateral) HRTF processing with accurate ILD
@@ -140,7 +140,7 @@ When the user resets macros, everything goes to 0% — no crossfeed, no width ex
 
 ### Component: `ProcessorChain.cpp`
 
-#### [MODIFY] [ProcessorChain.cpp](file:///c:/Users/athar/Desktop/Nexus3D/app/src/main/cpp/ProcessorChain.cpp)
+#### [MODIFY] [ProcessorChain.cpp](file:///c:/Users/athar/Desktop/Nexus/app/src/main/cpp/ProcessorChain.cpp)
 - Add `SoftLimiterModule` as final module in the chain
 - Replace hard clamp with comment noting limiter handles it (keep as safety net only)
 
@@ -148,7 +148,7 @@ When the user resets macros, everything goes to 0% — no crossfeed, no width ex
 
 ### Component: `DspContext.h`
 
-#### [MODIFY] [DspContext.h](file:///c:/Users/athar/Desktop/Nexus3D/app/src/main/cpp/DspContext.h)
+#### [MODIFY] [DspContext.h](file:///c:/Users/athar/Desktop/Nexus/app/src/main/cpp/DspContext.h)
 - Change `WIDTH_AMOUNT` default from `1.15f` to `1.0f` (unit gain — transparent baseline, macro adds widening)
 - Change `HAAS_MIX` default from `0.22f` to `0.18f` (lower default to compensate for fixed spectral shaping)
 - Change `ITD_AMOUNT` default from `0.35f` to `0.40f` (now active — slightly higher for clearer externalization)
@@ -158,14 +158,14 @@ When the user resets macros, everything goes to 0% — no crossfeed, no width ex
 
 ### Component: `MacroMapper.kt`
 
-#### [MODIFY] [MacroMapper.kt](file:///c:/Users/athar/Desktop/Nexus3D/app/src/main/java/com/nexus/nexus3d/core/domain/MacroMapper.kt)
+#### [MODIFY] [MacroMapper.kt](file:///c:/Users/athar/Desktop/Nexus/app/src/main/java/com/nexus/Nexus/core/domain/MacroMapper.kt)
 - No changes needed — mapping logic is sound; the DSP fixes will make the mapped parameters work correctly
 
 ---
 
 ### Component: `DspRepository.kt`
 
-#### [MODIFY] [DspRepository.kt](file:///c:/Users/athar/Desktop/Nexus3D/app/src/main/java/com/nexus/nexus3d/core/domain/DspRepository.kt)
+#### [MODIFY] [DspRepository.kt](file:///c:/Users/athar/Desktop/Nexus/app/src/main/java/com/nexus/Nexus/core/domain/DspRepository.kt)
 - Update `resetMacros()`: reset to `0.5f` for all macros (not `0.0f`) for natural-sounding reset to flagship defaults
 
 ---

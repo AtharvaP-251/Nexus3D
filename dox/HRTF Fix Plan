@@ -64,7 +64,7 @@ This is partially incorrect: pinna spectral cues primarily encode **elevation an
 
 ### Component 1: `DspContext.h` — Parameter Taxonomy Refactor
 
-#### [MODIFY] [DspContext.h](file:///c:/Users/athar/Desktop/Nexus3D/app/src/main/cpp/DspContext.h)
+#### [MODIFY] [DspContext.h](file:///c:/Users/athar/Desktop/Nexus/app/src/main/cpp/DspContext.h)
 
 Reorganize parameter enum into two semantically correct groups:
 - `// --- Spatial Localization (Direction) ---` for HRTF, ITD, Crossfeed, Haas
@@ -78,7 +78,7 @@ Add two **new parameters** to `DistanceModelingModule` that activate advanced ph
 
 ### Component 2: `Modules.h` / `Modules.cpp` — Advanced DistanceModelingModule
 
-#### [MODIFY] [Modules.h](file:///c:/Users/athar/Desktop/Nexus3D/app/src/main/cpp/modules/Modules.h)
+#### [MODIFY] [Modules.h](file:///c:/Users/athar/Desktop/Nexus/app/src/main/cpp/modules/Modules.h)
 
 Expand `DistanceModelingModule` from its current stub (1 LP, level rolloff) into a physically grounded 3-cue distance processor:
 
@@ -106,7 +106,7 @@ Expand `DistanceModelingModule` from its current stub (1 LP, level rolloff) into
 
 ### Component 3: `HrtfModule` — Elevation-only comment fix + elevation decoupling
 
-#### [MODIFY] [Modules.cpp](file:///c:/Users/athar/Desktop/Nexus3D/app/src/main/cpp/modules/Modules.cpp)
+#### [MODIFY] [Modules.cpp](file:///c:/Users/athar/Desktop/Nexus/app/src/main/cpp/modules/Modules.cpp)
 
 Fix the comment: "pinna cascade models pinna reflections that provide **elevation + distance cues**" → "**elevation and front/back discrimination cues**"
 
@@ -129,7 +129,7 @@ One high shelf above 13 kHz gives minimal elevation impression.
 
 ### Component 4: `ProcessorChain.cpp` — Module ordering comment update
 
-#### [MODIFY] [ProcessorChain.cpp](file:///c:/Users/athar/Desktop/Nexus3D/app/src/main/cpp/ProcessorChain.cpp)
+#### [MODIFY] [ProcessorChain.cpp](file:///c:/Users/athar/Desktop/Nexus/app/src/main/cpp/ProcessorChain.cpp)
 
 Update the ordering comment to reflect the correct perceptual domain taxonomy:
 

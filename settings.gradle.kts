@@ -19,5 +19,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Nexus 3D"
+rootProject.name = "Nexus"
 include(":app")

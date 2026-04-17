@@ -1,4 +1,4 @@
-# Nexus3D Spatial Audio App - Implementation Plan
+# Nexus Spatial Audio App - Implementation Plan
 
 This document outlines the detailed plan for building a flagship-quality spatial audio application on Android. The app will feature a heavily optimized native DSP pipeline isolated from the UI to ensure deterministic, low-latency audio processing while providing a sleek and modern user experience.
 

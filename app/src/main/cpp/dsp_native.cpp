@@ -16,7 +16,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* reserved) {
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_nexus_nexus3d_DspNativeBridge_setDspParameter(JNIEnv *env, jobject thiz, jint param_id, jfloat value) {
+Java_com_audixlab_nexus_DspNativeBridge_setDspParameter(JNIEnv *env, jobject thiz, jint param_id, jfloat value) {
     if (gProcessorChain) {
         gProcessorChain->getParameters().set(param_id, value);
     }
@@ -24,7 +24,7 @@ Java_com_nexus_nexus3d_DspNativeBridge_setDspParameter(JNIEnv *env, jobject thiz
 
 extern "C"
 JNIEXPORT jfloat JNICALL
-Java_com_nexus_nexus3d_DspNativeBridge_getDspParameter(JNIEnv *env, jobject thiz, jint param_id) {
+Java_com_audixlab_nexus_DspNativeBridge_getDspParameter(JNIEnv *env, jobject thiz, jint param_id) {
     if (gProcessorChain) {
         return gProcessorChain->getParameters().get(param_id);
     }
@@ -33,7 +33,7 @@ Java_com_nexus_nexus3d_DspNativeBridge_getDspParameter(JNIEnv *env, jobject thiz
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_nexus_nexus3d_DspNativeBridge_processAudio(JNIEnv *env, jobject thiz, jobject byte_buffer, jint size) {
+Java_com_audixlab_nexus_DspNativeBridge_processAudio(JNIEnv *env, jobject thiz, jobject byte_buffer, jint size) {
     if (!gProcessorChain) return;
 
     int16_t *buffer = static_cast<int16_t *>(env->GetDirectBufferAddress(byte_buffer));

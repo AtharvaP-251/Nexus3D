@@ -7,11 +7,11 @@ plugins {
 }
 
 android {
-    namespace = "com.nexus.nexus3d"
+    namespace = "com.audixlab.nexus"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.nexus.nexus3d"
+        applicationId = "com.audixlab.nexus"
         minSdk = 29
         targetSdk = 36
         versionCode = 1
