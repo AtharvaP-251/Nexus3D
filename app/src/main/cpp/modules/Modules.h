@@ -118,6 +118,8 @@ public:
 private:
   DelayLine delayL, delayR;
   OnePole mixSmooth; // Prevents zipper noise on mix changes
+  float haasLpStateL = 0.0f;
+  float haasLpStateR = 0.0f;
 };
 
 // ---------------------------------------------------------------------------
@@ -231,9 +233,27 @@ public:
   std::string getName() const override { return "Distance Modeling"; }
 
 private:
-  Biquad lpL, lpR;
+  Biquad airAbsorbL1, airAbsorbL2;
+  Biquad airAbsorbR1, airAbsorbR2;
+  Biquad proximityL, proximityR;
   int prevSampleRate = 0;
   float prevDist = -1.f;
+};
+
+// ---------------------------------------------------------------------------
+// Soft Limiter — True-peak lookahead / soft-knee dynamic compression
+// ---------------------------------------------------------------------------
+class SoftLimiterModule : public DspModule {
+public:
+  SoftLimiterModule();
+  void process(float *buffer, int numFrames, const DspParameters &params,
+               int sampleRate) override;
+  void reset() override;
+  std::string getName() const override { return "Soft Limiter"; }
+
+private:
+  SoftLimiter limiter; // Linked stereo limiter
+  int prevSampleRate = 0;
 };
 
 // ---------------------------------------------------------------------------

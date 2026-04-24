@@ -148,43 +148,47 @@ void CrossfeedModule::process(float *buffer, int numFrames,
 
   bool changed = (sampleRate != prevSampleRate) || (mix != prevMix) ||
                  (cutoff != prevCutoff);
+  
+  float itdAmount = params.get(ITD_AMOUNT);
+
   if (changed) {
     lpL.setLowPass(cutoff, 0.707f, sampleRate);
     lpR.setLowPass(cutoff, 0.707f, sampleRate);
     // BS2B Level 3: -9.5 dB head-shadow above 700 Hz
     hsL.setHighShelf(700.0f, -9.5f, sampleRate);
     hsR.setHighShelf(700.0f, -9.5f, sampleRate);
-    int maxDelay = static_cast<int>(sampleRate * 0.004f); // 4 ms max buffer
+    
+    // 4ms max buffer is plenty for 1.2ms ITD + extra
+    int maxDelay = static_cast<int>(sampleRate * 0.004f); 
     delayL.init(maxDelay);
     delayR.init(maxDelay);
+    
     prevSampleRate = sampleRate;
     prevMix = mix;
     prevCutoff = cutoff;
   }
 
-  // 640 µs ITD (acoustic propagation time across ~17 cm head)
-  int delayFrames = static_cast<int>(0.00064f * sampleRate);
-  if (delayFrames < 1)
-    delayFrames = 1;
+  // VARIABLE ITD: Map ITD_AMOUNT (0-1) to [200, 1200] µs
+  // 1200 µs is slightly exaggerated for "Hyper-Spatial" effect
+  float itdSec = (200.0f + itdAmount * 1000.0f) / 1000000.0f;
+  int delayFrames = static_cast<int>(itdSec * sampleRate);
+  delayFrames = std::max(1, std::min(delayFrames, (int)delayL.size() - 1));
 
   // Loudness normalization: keeps perceived level constant after cross-bleed
-  // addition
-  float crossGain = mix * 0.60f;                // cross-bleed amplitude
-  float normFactor = 1.0f / (1.0f + crossGain); // equal-loudness compensation
+  float crossGain = mix * 0.60f;                
+  float normFactor = 1.0f / (1.0f + crossGain); 
 
   for (int i = 0; i < numFrames; ++i) {
     float l = buffer[i * 2];
     float r = buffer[i * 2 + 1];
 
-    // Feed ipsilateral into delay (will be read as contralateral)
     delayL.write(l);
     delayR.write(r);
 
-    // Contralateral path: LP + head-shadow HF cut + delay
+    // Contralateral path: LP + head-shadow HF cut + VARIABLE ITD delay
     float crossToL = hsL.process(lpR.process(delayR.read(delayFrames)));
     float crossToR = hsR.process(lpL.process(delayL.read(delayFrames)));
 
-    // Mix and normalize for equal loudness
     buffer[i * 2] = (l + crossToL * crossGain) * normFactor;
     buffer[i * 2 + 1] = (r + crossToR * crossGain) * normFactor;
   }
@@ -218,8 +222,8 @@ void MidSideModule::process(float *buffer, int numFrames,
   float mg = params.get(MS_MID_GAIN);
   float sg = params.get(MS_SIDE_GAIN);
 
-  if (std::abs(mg - 1.0f) < 0.001f && std::abs(sg - 1.0f) < 0.001f)
-    return; // bit-exact passthrough
+  // Adaptive logic provides protection, so we do not early return here.
+  // We apply adaptive protection always.
 
   if (sampleRate != prevSampleRate) {
     bassLpL.setLowPass(300.0f, 0.5f, sampleRate);
@@ -235,9 +239,12 @@ void MidSideModule::process(float *buffer, int numFrames,
     float l = buffer[i * 2];
     float r = buffer[i * 2 + 1];
 
-    // Track mid-signal RMS for adaptive widening
-    float midRaw = (l + r) * 0.5f;
-    float rmsVal = rmsFollow.process(midRaw);
+    // Calculate Mid/Side components
+    float mid = (l + r) * 0.5f;
+    float side = (l - r) * 0.5f;
+
+    // Track mid-signal RMS for adaptive widening protection
+    float rmsVal = rmsFollow.process(mid);
 
     // Adaptive side gain: reduce as signal gets louder
     float adaptiveSg = sg;
@@ -247,22 +254,24 @@ void MidSideModule::process(float *buffer, int numFrames,
       adaptiveSg = sg - excess * MAX_REDUCTION * sg;
     }
 
-    // Bass separation: mono-safe (side capped at 1.0 for bass)
-    float bassL = bassLpL.process(l);
-    float bassR = bassLpR.process(r);
-    float trebL = l - bassL;
-    float trebR = r - bassR;
+    // Bypass if parameters are neutral AND we aren't in active gain reduction
+    if (std::abs(mg - 1.0f) < 0.001f && std::abs(sg - 1.0f) < 0.001f && std::abs(adaptiveSg - 1.0f) < 0.001f) {
+        continue;
+    }
 
-    // Bass M/S: side gain strictly capped at 1.0
-    float bassMid = (bassL + bassR) * 0.5f * mg;
-    float bassSide = (bassL - bassR) * 0.5f * std::min(adaptiveSg, 1.0f);
+    // Apply Mid gain (Clarity macro)
+    mid *= mg;
 
-    // Treble M/S: full adaptive side gain
-    float trebMid = (trebL + trebR) * 0.5f * mg;
-    float trebSide = (trebL - trebR) * 0.5f * adaptiveSg;
+    // Bass separation for Side channel only: mono-safe bass
+    // High-pass the side signal to keep bass centered
+    float sideLow = bassLpL.process(side);
+    float sideHigh = side - sideLow;
 
-    buffer[i * 2] = (bassMid + bassSide) + (trebMid + trebSide);
-    buffer[i * 2 + 1] = (bassMid - bassSide) + (trebMid - trebSide);
+    // Recombine: Mid is preserved (no phase-shifting filters applied to vocal core)
+    float processedSide = (sideLow * std::min(adaptiveSg, 1.0f)) + (sideHigh * adaptiveSg);
+
+    buffer[i * 2] = mid + processedSide;
+    buffer[i * 2 + 1] = mid - processedSide;
   }
 }
 
@@ -289,36 +298,27 @@ void StereoWidthModule::process(float *buffer, int numFrames,
     return;
 
   if (sampleRate != prevSampleRate) {
-    lpL.setLowPass(300.0f, 0.707f, sampleRate);
-    lpR.setLowPass(300.0f, 0.707f, sampleRate);
-    hpL.setHighPass(300.0f, 0.707f, sampleRate);
-    hpR.setHighPass(300.0f, 0.707f, sampleRate);
+    lpL.setLowPass(300.0f, 0.5f, sampleRate);
     prevSampleRate = sampleRate;
   }
 
-  float bassWidth = std::min(width, 1.05f); // mono-safe bass
+  float bassWidth = std::min(width, 1.05f);
   float trebWidth = width;
-
-  auto widen = [](float inL, float inR, float w, float &outL, float &outR) {
-    float mid = (inL + inR) * 0.5f;
-    float side = (inL - inR) * 0.5f * w;
-    outL = mid + side;
-    outR = mid - side;
-  };
 
   for (int i = 0; i < numFrames; ++i) {
     float l = buffer[i * 2];
     float r = buffer[i * 2 + 1];
 
-    float bassL = lpL.process(l), bassR = lpR.process(r);
-    float trebL = hpL.process(l), trebR = hpR.process(r);
+    float mid = (l + r) * 0.5f;
+    float side = (l - r) * 0.5f;
 
-    float bL, bR, tL, tR;
-    widen(bassL, bassR, bassWidth, bL, bR);
-    widen(trebL, trebR, trebWidth, tL, tR);
+    float sideLow = lpL.process(side);
+    float sideHigh = side - sideLow;
 
-    buffer[i * 2] = bL + tL;
-    buffer[i * 2 + 1] = bR + tR;
+    float processedSide = (sideLow * bassWidth) + (sideHigh * trebWidth);
+
+    buffer[i * 2] = mid + processedSide;
+    buffer[i * 2 + 1] = mid - processedSide;
   }
 }
 
@@ -326,8 +326,7 @@ void StereoWidthModule::process(float *buffer, int numFrames,
 // HaasDelayModule — Precision Precedence Effect (externalization-grade)
 //
 //  Key fix: delay STRICTLY clamped to [5, 15] ms (was 18 ms — audible echo!)
-//  Cross-delay: L→R and R→L with asymmetric timing for natural decorrelation
-//  Asymmetry: 2.3 ms offset ensures L and R delays are never identical
+//  Cross-delay: L→R and R→L with symmetrical timing for natural decorrelation
 //  Mix capped at 0.28 — safely below echo-perception threshold (~0.3)
 //  OnePole smoother on mix prevents clicks during preset transitions
 // ===========================================================================
@@ -337,6 +336,8 @@ void HaasDelayModule::reset() {
   delayL.reset();
   delayR.reset();
   mixSmooth.reset(0.0f);
+  haasLpStateL = 0.0f;
+  haasLpStateR = 0.0f;
 }
 
 void HaasDelayModule::process(float *buffer, int numFrames,
@@ -352,10 +353,10 @@ void HaasDelayModule::process(float *buffer, int numFrames,
 
   // Base delay (L source → bleeds into R)
   int delayLtoR = static_cast<int>(haasMs * sampleRate / 1000.0f);
-  // Asymmetric offset (prime-ish ms) for natural decorrelation
-  int delayRtoL = delayLtoR + static_cast<int>(2.3f * sampleRate / 1000.0f);
+  // Perfectly symmetrical for phantom center stability.
+  int delayRtoL = delayLtoR;
 
-  int needed = delayRtoL + 2;
+  int needed = delayLtoR + 2;
   if (delayL.size() < needed || delayR.size() < needed) {
     int maxDelay =
         static_cast<int>(20.0f * sampleRate / 1000.0f); // 20 ms max buffer
@@ -376,12 +377,17 @@ void HaasDelayModule::process(float *buffer, int numFrames,
     delayR.write(r);
 
     // Cross-delay: L bleed into R, R bleed into L
-    float lToR = delayL.read(delayLtoR);
-    float rToL = delayR.read(delayRtoL);
+    float rawLtoR = delayL.read(delayLtoR);
+    float rawRtoL = delayR.read(delayRtoL);
 
-    // Direct preserved at full level; cross-bleed adds spatial width
-    buffer[i * 2] = l + rToL * smoothedMix;
-    buffer[i * 2 + 1] = r + lToR * smoothedMix;
+    // Apply 1st-order LP at ~2.5 kHz to the cross-bleed (a = 2*pi*fc/fs)
+    float a = std::min(1.0f, (2.0f * (float)M_PI * 2500.0f) / sampleRate);
+    haasLpStateL += a * (rawRtoL - haasLpStateL);
+    haasLpStateR += a * (rawLtoR - haasLpStateR);
+
+    // Direct preserved at full level; cross-bleed adds spatial width without comb filter harshness
+    buffer[i * 2] = l + haasLpStateL * smoothedMix;
+    buffer[i * 2 + 1] = r + haasLpStateR * smoothedMix;
   }
 }
 
@@ -445,20 +451,20 @@ void HrtfModule::process(float *buffer, int numFrames,
 
   if (filterChanged) {
     // LEFT — ipsilateral pinna
-    pinnaPeakL1.setPeaking(4000.0f, 1.4f, 3.0f, sampleRate);
-    pinnaPeakL2.setPeaking(8500.0f, 2.0f, 2.0f, sampleRate);
-    pinnaNotchL1.setPeaking(7800.0f, 3.5f, -8.0f, sampleRate);
-    pinnaNotchL2.setPeaking(12500.0f, 2.5f, -5.0f, sampleRate);
-    pinnaNotchL3.setPeaking(14000.0f, 3.0f, -3.0f, sampleRate);
-    pinnaHighL.setHighShelf(13000.0f, elevation * 2.5f, sampleRate);
+    pinnaPeakL1.setPeaking(4000.0f, 1.4f, 3.0f * elevation, sampleRate);
+    pinnaPeakL2.setPeaking(8500.0f, 2.0f, 2.0f * intensity, sampleRate);
+    pinnaNotchL1.setPeaking(7800.0f, 3.5f, -8.0f * elevation, sampleRate); // back/below cue
+    pinnaNotchL2.setPeaking(12500.0f, 2.5f, -5.0f * intensity, sampleRate);
+    pinnaNotchL3.setPeaking(14000.0f, 3.0f, -3.0f * intensity, sampleRate);
+    pinnaHighL.setHighShelf(12000.0f, 2.5f * elevation, sampleRate);       // elevated cue
 
-    // RIGHT — symmetric ipsilateral (frontal/elevation cue)
-    pinnaPeakR1.setPeaking(4000.0f, 1.4f, 3.0f, sampleRate);
-    pinnaPeakR2.setPeaking(8500.0f, 2.0f, 2.0f, sampleRate);
-    pinnaNotchR1.setPeaking(7800.0f, 3.5f, -8.0f, sampleRate);
-    pinnaNotchR2.setPeaking(12500.0f, 2.5f, -5.0f, sampleRate);
-    pinnaNotchR3.setPeaking(14000.0f, 3.0f, -3.0f, sampleRate);
-    pinnaHighR.setHighShelf(13000.0f, elevation * 2.5f, sampleRate);
+    // RIGHT — symmetrical pinna (virtual speaker at +30 and -30 degrees)
+    pinnaPeakR1.setPeaking(4000.0f, 1.4f, 3.0f * elevation, sampleRate);
+    pinnaPeakR2.setPeaking(8500.0f, 2.0f, 2.0f * intensity, sampleRate);
+    pinnaNotchR1.setPeaking(7800.0f, 3.5f, -8.0f * elevation, sampleRate); // back/below cue
+    pinnaNotchR2.setPeaking(12500.0f, 2.5f, -5.0f * intensity, sampleRate);
+    pinnaNotchR3.setPeaking(14000.0f, 3.0f, -3.0f * intensity, sampleRate);
+    pinnaHighR.setHighShelf(12000.0f, 2.5f * elevation, sampleRate);       // elevated cue
 
     prevSampleRate = sampleRate;
     prevIntensity = intensity;
@@ -479,26 +485,27 @@ void HrtfModule::process(float *buffer, int numFrames,
 
   // Smooth intensity to prevent zipper noise
   intensitySmooth.setTime(20.0f, sampleRate);
-  float itdSamples = itdAmount * 0.0007f * (float)sampleRate; // 700 µs max
+  
+  // We no longer apply asymmetric ITD here because it shifts the entire stereo image Left.
+  // The CrossfeedModule handles cross-channel contralateral ITD properly.
 
   for (int i = 0; i < numFrames; ++i) {
     float l = buffer[i * 2];
     float r = buffer[i * 2 + 1];
-
-    // Disable asymmetric ITD to prevent left panning of centered vocals
-    float rItd = r;
 
     // HRTF spectral shaping
     float fl = pinnaHighL.process(pinnaNotchL3.process(pinnaNotchL2.process(
         pinnaNotchL1.process(pinnaPeakL2.process(pinnaPeakL1.process(l))))));
 
     float fr = pinnaHighR.process(pinnaNotchR3.process(pinnaNotchR2.process(
-        pinnaNotchR1.process(pinnaPeakR2.process(pinnaPeakR1.process(rItd))))));
+        pinnaNotchR1.process(pinnaPeakR2.process(pinnaPeakR1.process(r))))));
 
     // Smooth intensity blend (dry = original, wet = HRTF-processed)
     float blend = intensitySmooth.process(intensity);
+    
+    // For transparent scaling at 0 intensity, we enforce dry.
     buffer[i * 2] = l + (fl - l) * blend;
-    buffer[i * 2 + 1] = rItd + (fr - rItd) * blend;
+    buffer[i * 2 + 1] = r + (fr - r) * blend;
   }
 }
 
@@ -511,7 +518,7 @@ void HrtfModule::process(float *buffer, int numFrames,
 //  Tap times (ms) — psychoacoustically designed: max room impression, min
 //  coloration
 //    Left:   5, 9, 13, 17, 22, 28, 35, 45  ms  (scaled by ER_DELAY_SPREAD_MS /
-//    45) Right:  7, 11, 15, 21, 27, 33, 42, 52 ms  (offset for L/R asymmetry)
+//    45) Right:  5, 9, 13, 17, 22, 28, 35, 45 ms  (symmetrical for stability)
 //
 //  Gain law: exponential decay  gain = A × exp(-α × tapTime)
 //  Each tap has an independent Biquad LPF for wall HF absorption
@@ -544,17 +551,12 @@ void EarlyReflectionsModule::process(float *buffer, int numFrames,
     return;
 
   // Normalized tap times (relative to spread base)
-  // L taps at: 5, 9, 13, 17, 22, 28, 35, 45 ms → normalized by 45
-  static const float tapNormL[NUM_TAPS] = {0.111f, 0.200f, 0.289f, 0.378f,
+  // L/R taps at: 5, 9, 13, 17, 22, 28, 35, 45 ms → normalized by 45
+  static const float tapNorm[NUM_TAPS] = {0.111f, 0.200f, 0.289f, 0.378f,
                                            0.489f, 0.622f, 0.778f, 1.000f};
-  // R taps at: 7, 11, 15, 21, 27, 33, 42, 52 ms → normalized by 52
-  static const float tapNormR[NUM_TAPS] = {0.135f, 0.212f, 0.288f, 0.404f,
-                                           0.519f, 0.635f, 0.808f, 1.000f};
-  // Exponential gain decay: first tap brightest, last tap quietest
-  static const float tapGainL[NUM_TAPS] = {0.70f, 0.58f, 0.48f, 0.40f,
+  // Symmetrical tap gains (Exponential decay decay = A × exp(-α × tapTime))
+  static const float tapGain[NUM_TAPS] = {0.70f, 0.58f, 0.48f, 0.40f,
                                            0.33f, 0.27f, 0.22f, 0.17f};
-  static const float tapGainR[NUM_TAPS] = {0.65f, 0.54f, 0.45f, 0.37f,
-                                           0.30f, 0.24f, 0.20f, 0.15f};
 
   bool needInit = !initialized || (sampleRate != prevSampleRate);
   if (needInit) {
@@ -581,11 +583,6 @@ void EarlyReflectionsModule::process(float *buffer, int numFrames,
     prevHfDamping = hfDamping;
   }
 
-  // Scale spread: spreadMs controls the time of the latest tap
-  float spreadScaleL = spreadMs / 45.0f;
-  float spreadScaleR =
-      spreadMs / 52.0f * (52.0f / 45.0f); // keep R longer than L
-
   for (int i = 0; i < numFrames; ++i) {
     float l = buffer[i * 2];
     float r = buffer[i * 2 + 1];
@@ -596,18 +593,14 @@ void EarlyReflectionsModule::process(float *buffer, int numFrames,
 
     float erL = 0.0f, erR = 0.0f;
     for (int t = 0; t < NUM_TAPS; ++t) {
-      int dL = static_cast<int>(tapNormL[t] * spreadMs * spreadScaleL *
-                                sampleRate / 1000.0f);
-      int dR = static_cast<int>(tapNormR[t] * spreadMs * spreadScaleR *
-                                sampleRate / 1000.0f);
-      dL = std::max(1, std::min(dL, mainDelayL.size() - 1));
-      dR = std::max(1, std::min(dR, mainDelayR.size() - 1));
+      int d = static_cast<int>(tapNorm[t] * spreadMs * sampleRate / 1000.0f);
+      d = std::max(1, std::min(d, mainDelayL.size() - 1));
 
-      float tapL = absorberL[t].process(mainDelayL.read(dL));
-      float tapR = absorberR[t].process(mainDelayR.read(dR));
+      float tapL = absorberL[t].process(mainDelayL.read(d));
+      float tapR = absorberR[t].process(mainDelayR.read(d));
 
-      erL += tapL * tapGainL[t];
-      erR += tapR * tapGainR[t];
+      erL += tapL * tapGain[t];
+      erR += tapR * tapGain[t];
     }
 
     // Cross-channel bleed (8%) for diffuse field coherence
@@ -707,11 +700,8 @@ void ReverbModule::process(float *buffer, int numFrames,
   int predelayFrames = static_cast<int>(predelayMs * sampleRate / 1000.0f);
   predelayFrames = std::max(0, std::min(predelayFrames, predelayL.size() - 1));
 
-  // Alternating allpass gains to break resonance patterns
-  static const float apGainL[NUM_ALLPASS] = {0.50f, 0.48f, 0.52f,
-                                             0.47f, 0.51f, 0.49f};
-  static const float apGainR[NUM_ALLPASS] = {0.48f, 0.52f, 0.47f,
-                                             0.51f, 0.49f, 0.53f};
+  // Alternating allpass gains to break resonance patterns (wider spread)
+  static const float apGain[NUM_ALLPASS] = {0.50f, 0.37f, 0.58f, 0.33f, 0.61f, 0.42f};
 
   for (int i = 0; i < numFrames; ++i) {
     float l = buffer[i * 2];
@@ -740,8 +730,8 @@ void ReverbModule::process(float *buffer, int numFrames,
 
     // 6 series allpass diffusers
     for (int a = 0; a < NUM_ALLPASS; a++) {
-      outL = allpassL[a].process(outL, apGainL[a]);
-      outR = allpassR[a].process(outR, apGainR[a]);
+      outL = allpassL[a].process(outL, apGain[a]);
+      outR = allpassR[a].process(outR, apGain[a]);
     }
 
     buffer[i * 2] = l * dry + outL * wet;
@@ -769,11 +759,18 @@ void PanningModule::process(float *buffer, int numFrames,
 // ===========================================================================
 // DistanceModelingModule — air absorption + level rolloff (dormant)
 // ===========================================================================
+// ===========================================================================
+// Distance ModelingModule — Physical air absorption + level rolloff
+// ===========================================================================
 DistanceModelingModule::DistanceModelingModule() { reset(); }
 
 void DistanceModelingModule::reset() {
-  lpL.reset();
-  lpR.reset();
+  airAbsorbL1.reset();
+  airAbsorbL2.reset();
+  airAbsorbR1.reset();
+  airAbsorbR2.reset();
+  proximityL.reset();
+  proximityR.reset();
   prevSampleRate = 0;
   prevDist = -1.f;
 }
@@ -787,21 +784,63 @@ void DistanceModelingModule::process(float *buffer, int numFrames,
 
   bool changed = (sampleRate != prevSampleRate) || (dist != prevDist);
   if (changed) {
-    float cutoff = 20000.0f - (16000.0f * dist);
-    cutoff = std::max(cutoff, 400.0f);
-    lpL.setLowPass(cutoff, 0.707f, sampleRate);
-    lpR.setLowPass(cutoff, 0.707f, sampleRate);
+    // Air absorption (ISO 9613-1 inspired cascaded shelf)
+    // HF attenuation at distance=1.0 is approx 6dB @ 16kHz, 2dB @ 8kHz
+    float gain1 = -4.0f * dist;
+    float gain2 = -2.0f * dist;
+    airAbsorbL1.setHighShelf(8000.0f, gain1, sampleRate);
+    airAbsorbR1.setHighShelf(8000.0f, gain1, sampleRate);
+    airAbsorbL2.setHighShelf(16000.0f, gain2, sampleRate);
+    airAbsorbR2.setHighShelf(16000.0f, gain2, sampleRate);
+
+    // Nearfield proximity effect
+    float proxGain = dist < 0.1f ? (1.5f * (1.0f - dist * 10.0f)) : 0.0f;
+    proximityL.setLowShelf(200.0f, proxGain, sampleRate);
+    proximityR.setLowShelf(200.0f, proxGain, sampleRate);
+
     prevSampleRate = sampleRate;
     prevDist = dist;
   }
 
+  // Amplitude Rolloff (inverse square law)
   float atten = 1.0f / (1.0f + params.get(DISTANCE_ROLLOFF) * dist * dist);
 
   for (int i = 0; i < numFrames; ++i) {
-    buffer[i * 2] = lpL.process(buffer[i * 2]) * atten;
-    buffer[i * 2 + 1] = lpR.process(buffer[i * 2 + 1]) * atten;
+    float l = buffer[i * 2];
+    float r = buffer[i * 2 + 1];
+
+    l = proximityL.process(airAbsorbL2.process(airAbsorbL1.process(l))) * atten;
+    r = proximityR.process(airAbsorbR2.process(airAbsorbR1.process(r))) * atten;
+
+    buffer[i * 2] = l;
+    buffer[i * 2 + 1] = r;
   }
 }
+
+// ===========================================================================
+// Soft Limiter Module
+// ===========================================================================
+SoftLimiterModule::SoftLimiterModule() { reset(); }
+
+void SoftLimiterModule::reset() {
+  limiter.reset();
+  prevSampleRate = 0;
+}
+
+void SoftLimiterModule::process(float *buffer, int numFrames,
+                                const DspParameters &params, int sampleRate) {
+  if (sampleRate != prevSampleRate) {
+    // 2.5ms attack, 50ms release for transparent limiting
+    limiter.init(2.5f, 50.0f, sampleRate);
+    prevSampleRate = sampleRate;
+  }
+
+  for (int i = 0; i < numFrames; ++i) {
+    // LINKED STEREO: Prevents phantom center shift during transients
+    limiter.processStereo(buffer[i * 2], buffer[i * 2 + 1]);
+  }
+}
+
 
 // ===========================================================================
 // ItdModule — legacy standalone ITD (dormant, baked into HrtfModule now)

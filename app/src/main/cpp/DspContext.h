@@ -6,65 +6,41 @@
 namespace nexus {
 
 enum DspParamId {
-    // Global
     GLOBAL_BYPASS = 0,
-    GLOBAL_GAIN,
+    GLOBAL_GAIN = 1,
+    EQ_PRE_GAIN = 2,
+    EQ_LOW_SHELF_FREQ = 3,
+    EQ_LOW_SHELF_GAIN = 4,
+    EQ_PEAK_FREQ = 5,
+    EQ_PEAK_GAIN = 6,
+    EQ_PEAK_Q = 7,
+    EQ_HIGH_SHELF_FREQ = 8,
+    EQ_HIGH_SHELF_GAIN = 9,
+    MS_MID_GAIN = 10,
+    MS_SIDE_GAIN = 11,
+    PHASE_DELAY_MS = 12,
+    PHASE_INVERT = 13,
+    CROSSFEED_MIX = 14,
+    CROSSFEED_CUTOFF = 15,
+    WIDTH_AMOUNT = 16,
+    PAN_BALANCE = 17,
+    HAAS_DELAY_MS = 18,
+    HAAS_MIX = 19,
+    HRTF_INTENSITY = 20,
+    HRTF_ELEVATION = 21,
+    ITD_AMOUNT = 22,
+    DISTANCE_AMOUNT = 23,
+    DISTANCE_ROLLOFF = 24,
+    ER_DELAY_SPREAD_MS = 25,
+    ER_MIX = 26,
+    ER_HF_DAMPING = 27,
+    REVERB_DECAY = 28,
+    REVERB_DAMPING = 29,
+    REVERB_ROOM_SIZE = 30,
+    REVERB_WET = 31,
+    REVERB_DRY = 32,
+    REVERB_PREDELAY_MS = 33,
 
-    // Pre-EQ
-    EQ_PRE_GAIN,
-    EQ_LOW_SHELF_FREQ,
-    EQ_LOW_SHELF_GAIN,
-    EQ_PEAK_FREQ,
-    EQ_PEAK_GAIN,
-    EQ_PEAK_Q,
-    EQ_HIGH_SHELF_FREQ,
-    EQ_HIGH_SHELF_GAIN,
-
-    // Mid/Side
-    MS_MID_GAIN,
-    MS_SIDE_GAIN,
-
-    // Phase Alignment
-    PHASE_DELAY_MS,
-    PHASE_INVERT,
-
-    // Crossfeed (BS2B Level 3)
-    CROSSFEED_MIX,
-    CROSSFEED_CUTOFF,
-
-    // Stereo Width (frequency-dependent)
-    WIDTH_AMOUNT,
-
-    // Panning (dormant)
-    PAN_BALANCE,
-
-    // Haas / Precedence Effect [5–15 ms enforced]
-    HAAS_DELAY_MS,
-    HAAS_MIX,
-
-    // HRTF Pinnae Simulation + Integrated ITD
-    HRTF_INTENSITY,
-    HRTF_ELEVATION,
-    ITD_AMOUNT,       // 0.0–1.0 → 0–700 µs (now active)
-
-    // Distance Modeling (dormant)
-    DISTANCE_AMOUNT,
-    DISTANCE_ROLLOFF,
-
-    // Early Reflections
-    ER_DELAY_SPREAD_MS,
-    ER_MIX,
-    ER_HF_DAMPING,
-
-    // Reverb (True-Stereo Freeverb)
-    REVERB_DECAY,
-    REVERB_DAMPING,
-    REVERB_ROOM_SIZE,
-    REVERB_WET,
-    REVERB_DRY,
-    REVERB_PREDELAY_MS,
-
-    // Max number of params
     PARAM_MAX_COUNT
 };
 
@@ -102,7 +78,7 @@ public:
         set(CROSSFEED_CUTOFF, 700.0f);
 
         // --- Stereo Width (gentle complement to M/S adaptive) ---
-        set(WIDTH_AMOUNT, 1.15f);    // was 1.30; transparent non-coloring expansion
+        set(WIDTH_AMOUNT, 1.00f);    // 1.00 is perfectly transparent (no expansion)
 
         // --- Panning (dormant) ---
         set(PAN_BALANCE, 0.0f);
@@ -116,7 +92,7 @@ public:
         set(HRTF_ELEVATION, 0.20f);  // was 0.30; gentle front-above cue
 
         // --- ITD (NOW ACTIVE: essential for externalization + HRTF pairing) ---
-        set(ITD_AMOUNT, 0.35f);      // was 0.0; 35% of 700 µs ≈ 245 µs — centered forward
+        set(ITD_AMOUNT, 0.0f);       // 0.0 is center anchor (no panning)
 
         // --- Distance Modeling (dormant) ---
         set(DISTANCE_AMOUNT,  0.0f);

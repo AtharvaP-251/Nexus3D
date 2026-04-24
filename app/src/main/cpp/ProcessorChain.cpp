@@ -46,6 +46,9 @@ void ProcessorChain::init() {
   modules.push_back(std::make_unique<EarlyReflectionsModule>());
   modules.push_back(std::make_unique<ReverbModule>());
 
+  // Output Dynamics
+  modules.push_back(std::make_unique<SoftLimiterModule>());
+
   // PanningModule is NOT in the chain.
   // Classes retained in Modules.h/cpp for future preset use.
 

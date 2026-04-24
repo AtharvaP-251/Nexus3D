@@ -18,7 +18,7 @@ public:
     Biquad() { reset(); }
 
     void reset() {
-        x1 = x2 = y1 = y2 = 0.0f;
+        d1 = d2 = 0.0f;
         b0 = 1.0f; b1 = b2 = a1 = a2 = 0.0f;
     }
 
@@ -114,15 +114,75 @@ public:
     }
 
     inline float process(float in) {
-        float out = b0*in + b1*x1 + b2*x2 - a1*y1 - a2*y2;
-        x2 = x1; x1 = in;
-        y2 = y1; y1 = out;
+        float out = b0 * in + d1;
+        d1 = b1 * in - a1 * out + d2;
+        d2 = b2 * in - a2 * out;
         return out;
     }
 
 private:
     float b0 = 1.f, b1 = 0.f, b2 = 0.f, a1 = 0.f, a2 = 0.f;
-    float x1 = 0.f, x2 = 0.f, y1 = 0.f, y2 = 0.f;
+    float d1 = 0.f, d2 = 0.f;
+};
+
+// ---------------------------------------------------------------------------
+// Soft Limiter (True-Peak Lookahead / Soft-Knee)
+// ---------------------------------------------------------------------------
+class SoftLimiter {
+public:
+    void init(float attackMs, float releaseMs, int sampleRate) {
+        attackCoeff = std::exp(-1.0f / (sampleRate * attackMs / 1000.0f));
+        releaseCoeff = std::exp(-1.0f / (sampleRate * releaseMs / 1000.0f));
+    }
+
+    void reset() {
+        gainReduction = 1.0f;
+    }
+
+    inline float process(float sample) {
+        float absSample = std::abs(sample);
+        float targetGain = 1.0f;
+        
+        // Soft knee starting at -1 dBFS (approx 0.89 absolute value)
+        const float threshold = 0.891f;
+        
+        if (absSample > threshold) {
+            targetGain = threshold / absSample;
+        }
+        
+        if (targetGain < gainReduction) {
+            gainReduction = attackCoeff * gainReduction + (1.0f - attackCoeff) * targetGain;
+        } else {
+            gainReduction = releaseCoeff * gainReduction + (1.0f - releaseCoeff) * targetGain;
+        }
+        
+        return sample * gainReduction;
+    }
+
+    /** Linked Stereo Process: applies identical gain reduction to both L and R to preserve image center */
+    inline void processStereo(float& l, float& r) {
+        float maxAbs = std::max(std::abs(l), std::abs(r));
+        float targetGain = 1.0f;
+        const float threshold = 0.891f;
+
+        if (maxAbs > threshold) {
+            targetGain = threshold / maxAbs;
+        }
+
+        if (targetGain < gainReduction) {
+            gainReduction = attackCoeff * gainReduction + (1.0f - attackCoeff) * targetGain;
+        } else {
+            gainReduction = releaseCoeff * gainReduction + (1.0f - releaseCoeff) * targetGain;
+        }
+
+        l *= gainReduction;
+        r *= gainReduction;
+    }
+
+private:
+    float gainReduction = 1.0f;
+    float attackCoeff = 0.0f;
+    float releaseCoeff = 0.0f;
 };
 
 // ---------------------------------------------------------------------------

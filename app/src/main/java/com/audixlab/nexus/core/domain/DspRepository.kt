@@ -62,113 +62,98 @@ class DspRepository @Inject constructor(
     private suspend fun initializePresets() {
         val factoryPresets = listOf(
 
-            // ── Custom ────────────────────────────────────────────────────────
-            // Flagship defaults — the best spatial experience out of the box.
-            // Macro sliders modulate around these values.
+            // ── Custom / Flagship Default ─────────────────────────────────────
             PresetEntity(
                 name = "Custom", isFactoryPreset = true,
-                // Recalibrated to flagship engine defaults — tonal transparency first
-                hrtfIntensity     = 0.65f, hrtfElevation    = 0.20f,
-                itdAmount         = 0.35f,                       // ITD now active
-                crossfeedMix      = 0.30f, crossfeedCutoff  = 700.0f,
-                msSideGain        = 1.00f,                       // neutral; adaptive M/S handles expansion
-                widthAmount       = 1.15f,
-                haasDelayMs       = 8.0f,  haasMix          = 0.22f, // inside Haas zone, no echo
-                erMix             = 0.28f, erDelaySpreadMs  = 22.0f, erHfDamping = 0.45f,
-                reverbWet         = 0.12f, reverbDecay      = 0.65f,
-                reverbDamping     = 0.50f, reverbRoomSize   = 0.52f,
-                reverbPredelayMs  = 8.0f
+                hrtfIntensity     = 0.60f, hrtfElevation    = 0.15f,
+                itdAmount         = 0.40f,                       
+                crossfeedMix      = 0.32f, crossfeedCutoff  = 700.0f,
+                msSideGain        = 1.00f, widthAmount      = 1.10f,
+                haasDelayMs       = 9.0f,  haasMix          = 0.18f, 
+                erMix             = 0.25f, erDelaySpreadMs  = 20.0f, erHfDamping = 0.50f,
+                reverbWet         = 0.10f, reverbDecay      = 0.60f,
+                reverbDamping     = 0.50f, reverbRoomSize   = 0.50f,
+                reverbPredelayMs  = 10.0f, globalGain       = 0.94f
             ),
 
             // ── Studio Reference ─────────────────────────────────────────────
-            // Minimal processing — clean, analytical, near-field monitor feel.
+            // Tonal transparency. Minimal crossfeed for natural speaker imaging.
             PresetEntity(
                 name = "Studio Reference", isFactoryPreset = true,
-                crossfeedMix = 0.10f,
-                widthAmount  = 1.05f,
-                globalGain   = 0.95f
+                hrtfIntensity = 0.20f, itdAmount = 0.15f,
+                crossfeedMix  = 0.18f, crossfeedCutoff = 650.0f,
+                widthAmount   = 1.00f,
+                globalGain    = 0.95f
             ),
 
             // ── Wide 3D ──────────────────────────────────────────────────────
-            // Maximum stereo expansion + light spatial depth.
+            // Aggressive stereo widening + spatial decorrelation.
             PresetEntity(
                 name = "Wide 3D", isFactoryPreset = true,
-                widthAmount   = 1.45f, msSideGain    = 1.28f,
-                crossfeedMix  = 0.15f,
-                haasMix       = 0.22f, haasDelayMs   = 12.0f, // fixed: was 16ms (above safe zone)
-                hrtfIntensity = 0.45f, itdAmount      = 0.25f,
-                erMix         = 0.22f,
-                globalGain    = 0.90f
+                widthAmount   = 1.55f, msSideGain     = 1.35f,
+                haasMix       = 0.25f, haasDelayMs    = 11.5f,
+                hrtfIntensity = 0.35f, itdAmount      = 0.30f,
+                erMix         = 0.20f, erDelaySpreadMs = 35.0f,
+                globalGain    = 0.88f
             ),
 
             // ── Concert Hall ─────────────────────────────────────────────────
-            // Natural room ambience — reverb-forward, wide diffuse field.
+            // Large room simulation. High reverb decay and pre-delay.
             PresetEntity(
                 name = "Concert Hall", isFactoryPreset = true,
-                reverbWet        = 0.28f, reverbDecay    = 0.80f,
-                reverbRoomSize   = 0.75f, reverbDamping  = 0.35f,
-                reverbPredelayMs = 20.0f,
-                erMix            = 0.35f, erDelaySpreadMs = 40.0f,
-                crossfeedMix     = 0.15f,
-                widthAmount      = 1.20f,
-                globalGain       = 0.90f
+                reverbWet        = 0.30f, reverbDecay     = 0.82f,
+                reverbRoomSize   = 0.85f, reverbDamping   = 0.30f,
+                reverbPredelayMs = 35.0f,
+                erMix            = 0.38f, erDelaySpreadMs = 55.0f,
+                crossfeedMix     = 0.12f, hrtfIntensity   = 0.40f,
+                globalGain       = 0.85f
             ),
 
             // ── Vocal Focus ──────────────────────────────────────────────────
-            // Center emphasis + subtle spatial — vocals forward, slight room.
+            // Mid-range presence bump + narrow stage for intimacy.
             PresetEntity(
                 name = "Vocal Focus", isFactoryPreset = true,
-                msMidGain    = 1.10f,
-                eqPeakGain   = 2.0f, eqPeakFreq = 2500.0f,
-                crossfeedMix = 0.10f,
-                widthAmount  = 1.05f,
+                msMidGain    = 1.20f,
+                eqPeakGain   = 2.5f,  eqPeakFreq     = 3200.0f, eqPeakQ = 1.2f,
+                crossfeedMix = 0.40f, widthAmount    = 1.00f,
+                reverbWet    = 0.05f, reverbDecay    = 0.40f,
                 globalGain   = 0.90f
             ),
 
             // ── Immersive Mode ───────────────────────────────────────────────
-            // Maximum externalization — everything pushed for the widest stage.
+            // Maximum externalization. High ITD and HRTF pinna cues.
             PresetEntity(
                 name = "Immersive Mode", isFactoryPreset = true,
-                hrtfIntensity    = 0.85f, hrtfElevation   = 0.40f,
-                itdAmount        = 0.50f,                        // maximum externalization (HRTF+ITD pairing)
-                crossfeedMix     = 0.20f, crossfeedCutoff = 700.0f,
-                msSideGain       = 1.30f,
-                widthAmount      = 1.52f,
-                haasMix          = 0.28f, haasDelayMs     = 13.0f, // fixed: was 20ms (echo zone!)
-                erMix            = 0.40f, erDelaySpreadMs = 28.0f, erHfDamping = 0.40f,
-                reverbWet        = 0.20f, reverbDecay     = 0.78f,
-                reverbDamping    = 0.40f, reverbRoomSize  = 0.62f,
-                reverbPredelayMs = 12.0f,
-                globalGain       = 0.86f
+                hrtfIntensity    = 0.85f, hrtfElevation   = 0.45f,
+                itdAmount        = 0.65f, 
+                crossfeedMix     = 0.35f, crossfeedCutoff = 700.0f,
+                msSideGain       = 1.40f, widthAmount      = 1.60f,
+                haasMix          = 0.28f, haasDelayMs     = 14.0f,
+                erMix            = 0.35f, erDelaySpreadMs = 25.0f,
+                reverbWet        = 0.18f, reverbDecay     = 0.70f,
+                globalGain       = 0.84f
             ),
 
             // ── Phone Speaker Enhancer ───────────────────────────────────────
+            // Compensates for physical tiny-speaker limitations.
             PresetEntity(
-                name = "Phone Speaker Enhancer",
-                isFactoryPreset = true,
-                msMidGain       = 0.9f,
-                msSideGain      = 1.30f,
-                widthAmount     = 1.40f,
-                eqLowShelfFreq  = 180.0f,
-                eqLowShelfGain  = 3.0f,
-                eqPeakFreq      = 3500.0f,
-                eqPeakGain      = -2.0f,
-                haasMix         = 0.20f, haasDelayMs = 14.0f,
-                erMix           = 0.15f,
-                globalGain      = 0.92f
+                name = "Phone Speaker Enhancer", isFactoryPreset = true,
+                msSideGain      = 1.50f, widthAmount     = 1.80f,
+                eqLowShelfFreq  = 220.0f, eqLowShelfGain = 6.5f,
+                eqPeakFreq      = 3500.0f, eqPeakGain    = -3.0f,
+                haasMix         = 0.30f,  haasDelayMs    = 15.0f,
+                globalGain      = 0.90f
             ),
 
             // ── Over-Ear Optimizer ───────────────────────────────────────────
+            // Compensates for closed-back resonance and driver proximity.
             PresetEntity(
-                name = "Over-Ear Optimizer",
-                isFactoryPreset = true,
-                crossfeedMix    = 0.15f,
-                widthAmount     = 1.20f,
-                haasMix         = 0.15f, haasDelayMs = 10.0f,
-                hrtfIntensity   = 0.35f, itdAmount   = 0.30f,
-                eqLowShelfFreq  = 120.0f,
-                eqLowShelfGain  = 1.5f,
-                globalGain      = 0.95f
+                name = "Over-Ear Optimizer", isFactoryPreset = true,
+                crossfeedMix    = 0.22f, itdAmount       = 0.45f,
+                widthAmount     = 1.15f, hrtfIntensity   = 0.40f,
+                eqLowShelfFreq  = 150.0f, eqLowShelfGain = -2.0f,
+                eqHighShelfFreq = 8500.0f, eqHighShelfGain = 1.5f,
+                globalGain      = 0.94f
             ),
 
             // ── In-Ear Monitor (IEM) ─────────────────────────────────────────

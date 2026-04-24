@@ -1,5 +1,7 @@
 package com.audixlab.nexus.feature.settings
 
+import kotlin.math.roundToInt
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -230,7 +232,7 @@ fun MacroSlider(
                 )
             }
             Text(
-                text = "${(value * 100).toInt()}%",
+                text = "${(value * 100).roundToInt()}%",
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary.copy(alpha = alpha)
@@ -240,7 +242,8 @@ fun MacroSlider(
             value = value,
             onValueChange = onValueChange,
             modifier = Modifier.fillMaxWidth(),
-            enabled = enabled
+            enabled = enabled,
+            steps = 9
         )
     }
 }
